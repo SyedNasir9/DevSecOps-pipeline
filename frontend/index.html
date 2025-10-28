@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DevSecOps</title>
+  <style>
+       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #1E3A8A 0%, #312E81 35%, #1E293B 100%);
+      color: #F9FAFB;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 36px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      max-width: 720px;
+      text-align: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+    margin: 0 0 12px 0;
+    font-size: 28px;
+    font-weight: 600;
+    background: linear-gradient(90deg, #60A5FA, #F59E0B);
+
+    background-clip: text;                
+    -webkit-background-clip: text;    
+    -moz-background-clip: text;          
+    color: transparent;                  
+    -webkit-text-fill-color: transparent;  
+    }
+
+
+    p {
+      margin: 8px 0 18px 0;
+      color: #D1D5DB;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .status {
+      font-family: monospace;
+      background: rgba(255,255,255,0.15);
+      color: #FBBF24;
+      padding: 8px 14px;
+      border-radius: 8px;
+      display: inline-block;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    .status.running { color: #10B981; }
+    .status.healthy { color: #3B82F6; }
+    .status.listening { color: #F59E0B; }
+
+    hr {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin: 20px 0;
+    }
+
+    .footer {
+      font-size: 13px;
+      color: #9CA3AF;
+      margin-top: 10px;
+    }
+
+    @keyframes floaty {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+      100% { transform: translateY(0); }
+    }
+
+    .card {
+      animation: floaty 5s ease-in-out infinite;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>🚀 DevSecOps CI/CD</h1>
+    <p>A minimal, modern frontend for your local DevSecOps pipeline — build → scan → deploy.</p>
+    <p><strong>App status:</strong> <span id="status" class="status">starting...</span></p>
+    <hr/>
+    <p>Open the developer console to view logs and simulated status updates.</p>
+    <div class="footer">© 2025 DevSecOps | Demo</div>
+  </div>
+
+  <script>
+    (function(){
+      const s = document.getElementById('status');
+      let ticks = 0;
+      const states = ['starting','running','healthy','listening'];
+      const t = setInterval(()=> {
+        ticks++;
+        const current = states[ticks % states.length];
+        s.textContent = current;
+        s.className = 'status ' + current;
+        console.log('DevSecOps tick', ticks, current);
+        if(ticks > 12) clearInterval(t);
+      }, 800);
+    })();
+  </script>
+</body>
+</html>

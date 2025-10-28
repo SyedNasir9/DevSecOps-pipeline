@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsecops-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devsecops-frontend
+  template:
+    metadata:
+      labels:
+        app: devsecops-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: devsecops-frontend:local
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devsecops-service
+spec:
+  type: NodePort
+  selector:
+    app: devsecops-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30001
