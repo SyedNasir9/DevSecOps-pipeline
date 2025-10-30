@@ -1,0 +1,63 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE = "devsecops-frontend:local"
+    REPORT_DIR = "reports"
+    VAULT_ADDR = "http://host.docker.internal:8200"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Build Image') {
+      steps {
+        sh 'docker build -t ${IMAGE} ./frontend'
+      }
+    }
+
+    stage('Trivy Scan') {
+      steps {
+        sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $(pwd)/reports:/reports aquasec/trivy:latest image --format json --output /reports/trivy.json ${IMAGE}'
+      }
+    }
+
+    stage('Kubesec Scan') {
+      steps {
+        sh 'docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml > reports/kubesec.json || true'
+      }
+    }
+
+    stage('Conftest (OPA)') {
+      steps {
+        sh 'conftest test frontend/k8s-deployment.yaml -p opa/ || true'
+      }
+    }
+
+    stage('Start App for DAST') {
+      steps {
+        sh 'docker run -d --name devsecops-demo -p 8080:80 devsecops-frontend:local || true'
+      }
+    }
+
+    stage('OWASP ZAP Baseline') {
+      steps {
+        sh 'docker run --rm -v $(pwd)/reports:/zap/reports owasp/zap2docker-stable zap-baseline.py -t http://host.docker.internal:8080 -r /zap/reports/zap_report.html || true'
+      }
+    }
+
+    stage('Deploy to K8s') {
+      steps {
+        sh 'kubectl apply -f frontend/k8s-deployment.yaml || true'
+      }
+    }
+  }
+
+  post {
+    always {
+      archiveArtifacts artifacts: 'reports/**'
+    }
+  }
+}
