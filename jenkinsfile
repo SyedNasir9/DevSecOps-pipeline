@@ -33,14 +33,18 @@ pipeline {
       steps {
         sh '''
         mkdir -p ${REPORT_DIR}
-        docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml > ${REPORT_DIR}/kubesec.json || true
+        docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml \
+        > ${REPORT_DIR}/kubesec-report.html || true
         '''
       }
     }
 
     stage('Conftest (OPA)') {
       steps {
-        sh 'conftest test frontend/k8s-deployment.yaml -p opa/ || true'
+        sh '''
+        mkdir -p ${REPORT_DIR}
+        conftest test frontend/k8s-deployment.yaml -p opa/ > ${REPORT_DIR}/opa-report.txt || true
+        '''
       }
     }
 
@@ -76,7 +80,7 @@ pipeline {
         allowMissing: true,
         keepAll: true,
         reportDir: 'reports',
-        reportFiles: 'trivy-report.html, zap_report.html',
+        reportFiles: 'trivy-report.html,zap_report.html,kubesec-report.html,opa-report.txt',
         reportName: 'Security Scan Reports'
       ])
     }
