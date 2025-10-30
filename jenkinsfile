@@ -22,12 +22,21 @@ pipeline {
       steps {
         sh '''
         mkdir -p ${REPORT_DIR}
+
+        # Run Trivy scan and save JSON
         docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-        -v $(pwd)/${REPORT_DIR}:/reports \
-        aquasec/trivy:latest image --format html --output /reports/trivy-report.html ${IMAGE}
+          -v $(pwd)/${REPORT_DIR}:/reports \
+          aquasec/trivy:latest image --format json --output /reports/trivy-report.json ${IMAGE}
+
+        # Optional: convert JSON to HTML using Trivy template
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+          -v $(pwd)/${REPORT_DIR}:/reports \
+          aquasec/trivy:latest image --format template --template "@contrib/html.tpl" \
+          --output /reports/trivy-report.html ${IMAGE} || true
         '''
       }
-    }
+   }
+
 
     stage('Kubesec Scan') {
       steps {
