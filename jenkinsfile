@@ -1,99 +1,92 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    IMAGE = "devsecops-frontend:local"
-    REPORT_DIR = "reports"
-    VAULT_ADDR = "http://host.docker.internal:8200"
-  }
-
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    environment {
+        IMAGE = "devsecops-frontend:local"
+        REPORT_DIR = "reports"
     }
 
-    stage('Build Image') {
-      steps {
-        sh 'docker build -t ${IMAGE} ./frontend'
-      }
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE} ./frontend"
+            }
+        }
+
+        stage('Create Reports Directory') {
+            steps {
+                sh "mkdir -p ${REPORT_DIR}"
+            }
+        }
+
+        stage('Trivy Scan') {
+            steps {
+                sh """
+                # JSON report
+                docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \\
+                    -v \$(pwd)/${REPORT_DIR}:/reports \\
+                    aquasec/trivy:latest image --format json --output /reports/trivy-report.json ${IMAGE}
+
+                # HTML report
+                docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \\
+                    -v \$(pwd)/${REPORT_DIR}:/reports \\
+                    aquasec/trivy:latest image --format template --template "@contrib/html.tpl" \\
+                    --output /reports/trivy-report.html ${IMAGE} || true
+                """
+            }
+        }
+
+        stage('Kubesec Scan') {
+            steps {
+                sh "docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml > ${REPORT_DIR}/kubesec.json || true"
+            }
+        }
+
+        stage('Conftest OPA Scan') {
+            steps {
+                sh "conftest test frontend/k8s-deployment.yaml -p opa/ || true"
+            }
+        }
+
+        stage('Start App for DAST') {
+            steps {
+                sh "docker run -d --name devsecops-demo -p 8080:80 ${IMAGE} || true"
+            }
+        }
+
+        stage('OWASP ZAP Baseline') {
+            steps {
+                sh """
+                docker run --rm -v \$(pwd)/${REPORT_DIR}:/zap/reports \\
+                    zaproxy/zap-stable zap-baseline.py \\
+                    -t http://host.docker.internal:8080 \\
+                    -m 1 -r /zap/reports/zap_report.html || true
+                """
+            }
+        }
+
+        stage('Deploy to K8s') {
+            steps {
+                sh "kubectl apply -f frontend/k8s-deployment.yaml || true"
+            }
+        }
     }
 
-    stage('Trivy Scan') {
-      steps {
-        sh '''
-        mkdir -p ${REPORT_DIR}
+    post {
+        always {
+            archiveArtifacts artifacts: 'reports/**'
 
-        # JSON scan (archival)
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-          -v $(pwd)/${REPORT_DIR}:/reports \
-          aquasec/trivy:latest image --format json --output /reports/trivy-report.json ${IMAGE}
-
-        # HTML scan using template
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-          -v $(pwd)/${REPORT_DIR}:/reports \
-          aquasec/trivy:latest image --format template --template "@contrib/html.tpl" \
-          --output /reports/trivy-report.html ${IMAGE} || true
-        '''
-      }
+            publishHTML(target: [
+                allowMissing: true,
+                keepAll: true,
+                reportDir: 'reports',
+                reportFiles: 'trivy-report.html,zap_report.html',
+                reportName: 'Security Scan Reports'
+            ])
+        }
     }
-
-    stage('Kubesec Scan') {
-      steps {
-        sh '''
-        mkdir -p ${REPORT_DIR}
-        docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml > ${REPORT_DIR}/kubesec.json || true
-        '''
-      }
-    }
-
-    stage('Conftest (OPA)') {
-      steps {
-        sh '''
-        mkdir -p ${REPORT_DIR}
-        conftest test frontend/k8s-deployment.yaml -p opa/ || true
-        '''
-      }
-    }
-
-    stage('Start App for DAST') {
-      steps {
-        sh 'docker run -d --name devsecops-demo -p 8080:80 ${IMAGE} || true'
-      }
-    }
-
-    stage('OWASP ZAP Baseline') {
-      steps {
-        sh '''
-        docker run --rm -v $(pwd)/${REPORT_DIR}:/zap/reports \
-          zaproxy/zap-stable zap-baseline.py \
-          -t http://host.docker.internal:8080 \
-          -m 2 -r /zap/reports/zap_report.html -J /zap/reports/zap_report.json || true
-        '''
-      }
-    }
-
-    stage('Deploy to K8s') {
-      steps {
-        sh 'kubectl apply -f frontend/k8s-deployment.yaml || true'
-      }
-    }
-  }
-
-  post {
-    always {
-      // Archive all reports
-      archiveArtifacts artifacts: 'reports/**'
-
-      // Publish HTML reports in Jenkins
-      publishHTML(target: [
-        allowMissing: true,
-        keepAll: true,
-        reportDir: 'reports',
-        reportFiles: 'trivy-report.html,zap_report.html',
-        reportName: 'Security Scan Reports'
-      ])
-    }
-  }
 }
