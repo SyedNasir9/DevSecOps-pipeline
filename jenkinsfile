@@ -9,7 +9,9 @@ pipeline {
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+      }
     }
 
     stage('Build Image') {
@@ -23,27 +25,25 @@ pipeline {
         sh '''
         mkdir -p ${REPORT_DIR}
 
-        # Run Trivy scan and save JSON
+        # JSON scan (archival)
         docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
           -v $(pwd)/${REPORT_DIR}:/reports \
           aquasec/trivy:latest image --format json --output /reports/trivy-report.json ${IMAGE}
 
-        # Optional: convert JSON to HTML using Trivy template
+        # HTML scan using template
         docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
           -v $(pwd)/${REPORT_DIR}:/reports \
           aquasec/trivy:latest image --format template --template "@contrib/html.tpl" \
           --output /reports/trivy-report.html ${IMAGE} || true
         '''
       }
-   }
-
+    }
 
     stage('Kubesec Scan') {
       steps {
         sh '''
         mkdir -p ${REPORT_DIR}
-        docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml \
-        > ${REPORT_DIR}/kubesec-report.html || true
+        docker run --rm -i controlplaneio/kubesec < frontend/k8s-deployment.yaml > ${REPORT_DIR}/kubesec.json || true
         '''
       }
     }
@@ -52,7 +52,7 @@ pipeline {
       steps {
         sh '''
         mkdir -p ${REPORT_DIR}
-        conftest test frontend/k8s-deployment.yaml -p opa/ > ${REPORT_DIR}/opa-report.txt || true
+        conftest test frontend/k8s-deployment.yaml -p opa/ || true
         '''
       }
     }
@@ -67,9 +67,9 @@ pipeline {
       steps {
         sh '''
         docker run --rm -v $(pwd)/${REPORT_DIR}:/zap/reports \
-        zaproxy/zap-stable zap-baseline.py \
-        -t http://host.docker.internal:8080 \
-        -m 1 -r /zap/reports/zap_report.html || true
+          zaproxy/zap-stable zap-baseline.py \
+          -t http://host.docker.internal:8080 \
+          -m 2 -r /zap/reports/zap_report.html -J /zap/reports/zap_report.json || true
         '''
       }
     }
@@ -83,13 +83,15 @@ pipeline {
 
   post {
     always {
+      // Archive all reports
       archiveArtifacts artifacts: 'reports/**'
 
+      // Publish HTML reports in Jenkins
       publishHTML(target: [
         allowMissing: true,
         keepAll: true,
         reportDir: 'reports',
-        reportFiles: 'trivy-report.html,zap_report.html,kubesec-report.html,opa-report.txt',
+        reportFiles: 'trivy-report.html,zap_report.html',
         reportName: 'Security Scan Reports'
       ])
     }
